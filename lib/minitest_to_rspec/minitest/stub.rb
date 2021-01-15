@@ -44,15 +44,15 @@ module MinitestToRspec
       end
 
       def with
-        @call.find_call_in_receiver_chain(:with)&.arguments&.first
+        @call.find_call_in_receiver_chain(:with)&.arguments
       end
 
       def returns
         case @call.method_name
         when :returns
-          @call.arguments.first
+          @call.arguments
         else
-          @call.find_call_in_receiver_chain(:returns)&.arguments&.first
+          @call.find_call_in_receiver_chain(:returns)&.arguments
         end
       end
 

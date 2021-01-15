@@ -27,10 +27,10 @@ module MinitestToRspec
       def to_rspec_exp
         stub_chain = s(:call, nil, :receive, @message)
         unless @with.nil?
-          stub_chain = s(:call, stub_chain, :with, @with)
+          stub_chain = s(:call, stub_chain, :with, *@with)
         end
         unless @returns.nil?
-          stub_chain = s(:call, stub_chain, :and_return, @returns)
+          stub_chain = s(:call, stub_chain, :and_return, *@returns)
         end
         unless @count.nil?
           stub_chain = s(:call, stub_chain, receive_count_method)

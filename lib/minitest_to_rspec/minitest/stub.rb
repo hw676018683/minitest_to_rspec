@@ -17,8 +17,22 @@ module MinitestToRspec
       # Given e.g. `X.any_instance.expects(:y)`, returns `X`.
       def receiver
         chain = @call.receiver_chain
-        last = chain[-1]
-        last.nil? ? chain[-2] : last
+
+        if %i(expects stubs).include?(@call.method_name)
+          chain.unshift @call.sexp
+        end
+
+        chain.each do |receiver_exp|
+          if %i(expects stubs).include?(receiver_exp[2])
+            if receiver_exp[1] && receiver_exp[1][0] == :call && receiver_exp[1][2] == :any_instance
+              return receiver_exp[1][1]
+            else
+              return receiver_exp[1] ? receiver_exp[1] : s(:self)
+            end
+          end
+        end
+
+        raise "Failed to find receiver"
       end
 
       # Returns true if we are stubbing any instance of `receiver`.
@@ -44,7 +58,21 @@ module MinitestToRspec
       end
 
       def with
-        @call.find_call_in_receiver_chain(:with)&.arguments
+        case @call.method_name
+        when :with
+          @call.arguments
+        else
+          @call.find_call_in_receiver_chain(:with)&.arguments
+        end
+      end
+
+      def raises
+        case @call.method_name
+        when :raises
+          @call.arguments
+        else
+          @call.find_call_in_receiver_chain(:raises)&.arguments
+        end
       end
 
       def returns
@@ -64,10 +92,14 @@ module MinitestToRspec
       # - never
       def count
         case @call.method_name
-        when :expects, :once
+        when :expects
+          -1
+        when :once
           1
+        when :never
+          0
         when :returns
-          the_call_to_stubs_or_expects.method_name == :expects ? 1 : nil
+          the_call_to_stubs_or_expects.method_name == :expects ? -1 : nil
         when :twice
           2
         end

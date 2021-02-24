@@ -20,6 +20,9 @@ module MinitestToRspec
 
         def process
           sexp = head
+          if sexp[1] && sexp[1][2] == :describe && sexp[1][1][1] == :RSpec && (helper_name = sexp[1][3][1]) =~ /Helper$/
+            @exp.block.unshift s(:call, nil, :include, s(:const, helper_name.to_sym))
+          end
           ebk = @exp.block
           if ebk.length > 1
             sexp << block
@@ -56,7 +59,11 @@ module MinitestToRspec
         # Returns an S-expression representing the
         # RDM (RSpec Describe Metadata) hash
         def rdm
-          s(:hash, s(:lit, :type), s(:lit, rdm_type))
+          if rdm_type
+            s(:hash, s(:lit, :type), s(:lit, rdm_type))
+          else
+            nil
+          end
         end
 
         # Returns the RDM (RSpec Describe Metadata) type.
@@ -79,15 +86,28 @@ module MinitestToRspec
             :decorator
           elsif @exp.action_mailer_test_case?
             :mailer
+          elsif @exp.active_view_case?
+            :view
+          elsif @exp.active_job_case?
+            :job
+          elsif @exp.integration_case?
+            nil
           else
             :model
           end
         end
 
         def rspec_describe
-          const = s(:const, described_class(@exp.name))
+          consts = %i(Graphql::PublishedFormCacheable)
+          class_name = described_class(@exp.name)
+
+          if consts.include?(class_name) || rdm_type == :controller
+            const = s(:const, class_name)
+          else
+            const = s(:str, class_name.to_s)
+          end
           call = s(:call, s(:const, :RSpec), :describe, const)
-          call << rdm if @rails
+          call << rdm if @rails && rdm
           call
         end
 

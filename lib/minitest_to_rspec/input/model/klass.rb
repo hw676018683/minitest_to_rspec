@@ -25,9 +25,22 @@ module MinitestToRspec
           lineage?(parent, %i[ActiveSupport TestCase])
         end
 
+        def active_view_case?
+          lineage?(parent, %i[ActionView TestCase])
+        end
+
+        def active_job_case?
+          lineage?(parent, %i[ActiveJob TestCase])
+        end
+
+        def integration_case?
+          lineage?(parent, %i[ActionDispatch IntegrationTest])
+        end
+
         # Raise an error if we don't know now to process the name
         # of this class.  Specifically, classes with module-shorthand.
         def assert_valid_name
+          return true
           if name.is_a?(Symbol)
             # Valid
           elsif name.respond_to?(:sexp_type) && name.sexp_type == :colon2
@@ -62,7 +75,12 @@ module MinitestToRspec
         # by MinitestToRspec.  See `#assert_valid_name`.
         #
         def name
-          @exp[1]
+          # FIX：Module shorthand (A::B::C) is not supported
+          if @exp[1].respond_to?(:sexp_type) && @exp[1].sexp_type == :colon2
+            ancestor_names(@exp[1]).join("::").to_sym
+          else
+            @exp[1]
+          end
         end
 
         # Returns the "inheritance".  Examples:
@@ -83,7 +101,10 @@ module MinitestToRspec
             action_controller_test_case? ||
             action_mailer_test_case? ||
             test_unit_test_case? ||
-            draper_test_case?
+            draper_test_case? ||
+            active_view_case? ||
+            active_job_case? ||
+            integration_case?
         end
 
         private
@@ -91,7 +112,8 @@ module MinitestToRspec
         def ancestor_names(exp)
           return [exp] if exp.is_a?(Symbol)
 
-          sexp_type?(:colon2, exp) || sexp_type?(:const, exp) ||
+          # Support colon3 type
+          sexp_type?(:colon2, exp) || sexp_type?(:const, exp) || sexp_type?(:colon3, exp) ||
             raise(TypeError, "Expected :const or :colon2, got #{exp.inspect}")
 
           exp.sexp_body.flat_map { |entry| ancestor_names(entry) }

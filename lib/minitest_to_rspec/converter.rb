@@ -16,7 +16,8 @@ module MinitestToRspec
     # - `file_path` - Optional. Value will replace any `__FILE__`
     #   keywords in the input.
     def convert(input, file_path = nil)
-      render process parse(input, file_path)
+      result = render process parse(input, file_path)
+      result.gsub(/\n\n/, "\n")
     end
 
     private

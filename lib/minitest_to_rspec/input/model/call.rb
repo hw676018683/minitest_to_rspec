@@ -44,6 +44,10 @@ module MinitestToRspec
             exp.sexp_type == :call && new(exp).refute_raises?
           end
 
+          def must_be_nil?(exp)
+            exp.sexp_type == :call && new(exp).must_be_nil?
+          end
+
           def method_name?(exp, name)
             exp.sexp_type == :call && new(exp).method_name.to_s == name.to_s
           end
@@ -58,14 +62,11 @@ module MinitestToRspec
         end
 
         def assert_difference?
-          return false unless method_name == :assert_difference
-          [[:str], %i[str lit]].include?(argument_types)
+          method_name == :assert_difference
         end
 
         def assert_no_difference?
-          method_name == :assert_no_difference &&
-            arguments.length == 1 &&
-            arguments[0].sexp_type == :str
+          method_name == :assert_no_difference
         end
 
         def assert_nothing_raised?
@@ -86,6 +87,10 @@ module MinitestToRspec
 
         def refute_raises?
           method_name == :refute_raises && raise_error_args?
+        end
+
+        def must_be_nil?
+          method_name == :must_be_nil
         end
 
         def calls_in_receiver_chain
@@ -119,11 +124,15 @@ module MinitestToRspec
         # assertion failure message, which will be discarded later.
         def raise_error_args?
           arg_types = arguments.map(&:sexp_type)
-          [[], [:str], [:const], %i[const str], [:colon2]].include?(arg_types)
+          [[], [:str], [:const], %i[const str], [:colon2], [:const, :call], [:const, :dstr]].include?(arg_types)
         end
 
         def receiver
-          @exp[1]
+          if @exp[1] && @exp[1][0] == :call && @exp[1][1] == nil && @exp[1][2] == :expect
+            @exp[1][3]
+          else
+            @exp[1]
+          end
         end
 
         # Consider the following chain of method calls:
@@ -172,6 +181,10 @@ module MinitestToRspec
 
         def question_mark_method?
           method_name.to_s.end_with?('?')
+        end
+
+        def sexp
+          @exp
         end
 
         private

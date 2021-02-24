@@ -47,16 +47,54 @@ module MinitestToRspec
           call = exp[1]
           block = exp[3]
           by = call[4]
-          what = parse(call[3][1])
+
+          if call[3].sexp_type == :array
+            return call[3][1..-1].inject(block) do |memo, item|
+              exp[1][3] = item
+              exp.sexp[3] = memo
+              method_assert_difference(exp)
+            end
+          end
+          what = parse_difference_params(call[3])
           matcher = by.nil? ? change(what) : change_by(what, by)
           expect_to(matcher, block, false)
+        end
+
+        def method_assert_changes(exp)
+          method_assert_difference(exp)
         end
 
         def method_assert_no_difference(exp)
           call = exp[1]
           block = exp[3]
-          what = parse(call[3][1])
+
+          if call[3].sexp_type == :array
+            return call[3][1..-1].inject(block) do |memo, item|
+              exp[1][3] = item
+              exp.sexp[3] = memo
+              method_assert_no_difference(exp)
+            end
+          end
+          what = parse_difference_params(call[3])
           expect_to_not(change(what), block, false)
+        end
+
+        def parse_difference_params(exp)
+          case exp.sexp_type
+          when :dstr
+            parse Ruby2Ruby.new.process(exp).undump.tr("'", '"')
+          when :str
+            parse(exp[1])
+          when :call
+            exp
+          when :iter
+            if exp[1].nil? || exp[1][2] != :lambda
+              raise "Failed to parse assert_(no_)difference params"
+            end
+            exp[3]
+          else
+            exp[1]
+          end
         end
 
         def method_assert_nothing_raised(exp)
@@ -69,7 +107,7 @@ module MinitestToRspec
         end
 
         def method_assert_raises(iter)
-          expect_to(raise_error(*iter.call_arguments), iter.block, false)
+          expect_to(raise_error(iter.call_arguments[0]), iter.block, false)
         end
 
         def method_refute_raise(iter)
@@ -77,7 +115,7 @@ module MinitestToRspec
         end
 
         def method_refute_raises(iter)
-          expect_to_not(raise_error(*iter.call_arguments), iter.block, false)
+          expect_to_not(raise_error(iter.call_arguments[0]), iter.block, false)
         end
 
         def method_setup(exp)
@@ -129,6 +167,7 @@ module MinitestToRspec
         # When the last argument is a string, it represents the
         # assertion failure message, and is discarded.
         def raise_error(*args)
+          args = args.compact
           args.pop if !args.empty? && args.last.sexp_type == :str
           matcher(:raise_error, *args)
         end

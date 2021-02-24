@@ -37,7 +37,10 @@ module MinitestToRspec
               example_block
             )
           else
-            @original
+            new_exp = s(@original[0], @original[1], @original[2])
+            @exp.body.each_with_object(new_exp) do |line, iter|
+              iter << process_line(line)
+            end
           end
         end
 

@@ -7,7 +7,7 @@ module MinitestToRspec
     # Represents a `receive` matcher from RSpec.
     # Conceptually the same as `Minitest::Stub`.
     class Stub
-      def initialize(receiver, any_instance, message, with, returns, count)
+      def initialize(receiver, any_instance, message, with, returns, count, raises = nil)
         Type.assert(Sexp, receiver)
         Type.bool(any_instance)
         Type.assert(Sexp, message)
@@ -20,21 +20,42 @@ module MinitestToRspec
         @with = with
         @returns = returns
         @count = count
+        @raises = raises
       end
 
       # Returns a Sexp representing an RSpec stub (allow) or message
       # expectation (expect)
       def to_rspec_exp
-        stub_chain = s(:call, nil, :receive, @message)
+        stub_chain =
+          if @message[0] == :hash
+            s(:call, nil, :receive_messages, @message)
+          else
+            s(:call, nil, :receive, @message)
+          end
+
         unless @with.nil?
           stub_chain = s(:call, stub_chain, :with, *@with)
         end
+
+        if rspec_mocks_method == :expect_any_instance_of
+          unless @count.nil? || @count == -1
+            stub_chain = s(:call, stub_chain, receive_count_method)
+          end
+        end
+
         unless @returns.nil?
           stub_chain = s(:call, stub_chain, :and_return, *@returns)
         end
-        unless @count.nil?
-          stub_chain = s(:call, stub_chain, receive_count_method)
+        unless @raises.nil?
+          stub_chain = s(:call, stub_chain, :and_raise, *@raises)
         end
+
+        if rspec_mocks_method != :expect_any_instance_of
+          unless @count.nil? || @count == -1
+            stub_chain = s(:call, stub_chain, receive_count_method)
+          end
+        end
+
         expect_allow = s(:call, nil, rspec_mocks_method, @receiver.dup)
         s(:call, expect_allow, :to, stub_chain)
       end
@@ -47,6 +68,8 @@ module MinitestToRspec
           :once
         when 2
           :twice
+        when 0
+          :never
         else
           raise "Unsupported message receive count: #{@count}"
         end

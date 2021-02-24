@@ -23,6 +23,9 @@ module MinitestToRspec
           stubs
           stub_everything
           twice
+          with
+          never
+          raises
         ].freeze
 
         def initialize(sexp, rails, mocha)
@@ -71,6 +74,14 @@ module MinitestToRspec
           matcher(:be_instance_of, exp)
         end
 
+        def be_include(exp)
+          matcher(:be_include, exp)
+        end
+
+        def match_array(exp)
+          matcher(:match_array, exp)
+        end
+
         def call_to_question_mark?(exp)
           sexp_type?(:call, exp) && Model::Call.new(exp).question_mark_method?
         end
@@ -84,7 +95,13 @@ module MinitestToRspec
         end
 
         def method_assert
-          refsert eq(s(:true)), be_truthy
+          actual = @exp.arguments[0]
+          expect_to(be_truthy, actual, true)
+        end
+
+        def method_assert_not
+          actual = @exp.arguments[0]
+          expect_to(be_falsey, actual, true)
         end
 
         def method_assert_equal
@@ -95,8 +112,15 @@ module MinitestToRspec
 
         def method_assert_match
           pattern = @exp.arguments[0]
+          expected = pattern[1].is_a?(Regexp) ? match(pattern)  : be_include(pattern)
           string = @exp.arguments[1]
-          expect_to(match(pattern), string, true)
+          expect_to(expected, string, true)
+        end
+
+        def method_assert_no_match
+          pattern = @exp.arguments[0]
+          string = @exp.arguments[1]
+          expect_to_not(match(pattern), string, true)
         end
 
         def method_assert_nil
@@ -129,6 +153,126 @@ module MinitestToRspec
           expect_to(be_instance_of(expected), calculated, true)
         end
 
+        def method_assert_in_delta
+          delta = @exp.arguments[2] || s(:lit, 0.001)
+          expected = s(:call, s(:call, nil, :be_within, delta), :of, @exp.arguments[1])
+          expect_to(expected, @exp.arguments[0], true)
+        end
+
+        def method_assert_not_in_delta
+          delta = s(:lit, 0.001)
+          expected = s(:call, s(:call, nil, :be_within, delta), :of, @exp.arguments[1])
+          expect_to_not(expected, @exp.arguments[0], true)
+        end
+
+        def method_assert_includes
+          calculated = @exp.arguments[0]
+          expected = @exp.arguments[1]
+          expect_to(be_include(expected), calculated, true)
+        end
+
+        def method_assert_not_includes
+          calculated = @exp.arguments[0]
+          expected = @exp.arguments[1]
+          expect_to_not(be_include(expected), calculated, true)
+        end
+
+        def method_assert_array_equal
+          calculated = @exp.arguments[1]
+          expected = @exp.arguments[0]
+          expect_to(match_array(expected), calculated, true)
+        end
+
+        def method_assert_respond_to
+          expect_to(be_truthy, s(:call, @exp.arguments[0], :respond_to?, @exp.arguments[1]), true)
+        end
+
+        def method_refute_empty
+          expect_to_not(be_empty, @exp.arguments[0], true)
+        end
+
+        def method_assert_not_empty
+          expect_to_not(be_empty, @exp.arguments[0], true)
+        end
+
+        def method_refute_includes
+          calculated = @exp.arguments[0]
+          expected = @exp.arguments[1]
+          expect_to_not(be_include(expected), calculated, true)
+        end
+
+        def method_refute_nil
+          expect_to_not(be_nil, @exp.arguments[0], true)
+        end
+
+        def method_assert_not_kind_of
+          expected = @exp.arguments[0]
+          calculated = @exp.arguments[1]
+          expect_to_not(be_a(expected), calculated, true)
+        end
+
+        def method_must_be_empty
+          expect_to(be_empty, @exp.receiver, true)
+        end
+
+        def method_must_equal
+          expected = @exp.arguments[0]
+          calculated = @exp.receiver
+          expect_to(eq(expected), calculated, true)
+        end
+
+        def method_must_be_close_to
+          delta = s(:lit, 0.001)
+          expected = s(:call, s(:call, nil, :be_within, delta), :of, @exp.arguments[0])
+          expect_to(expected, @exp.receiver, true)
+        end
+
+        def method_must_include
+          expected = @exp.arguments[0]
+          calculated = @exp.receiver
+          expect_to(be_include(expected), calculated, true)
+        end
+
+        def method_must_be_kind_of
+          expected = @exp.arguments[0]
+          calculated = @exp.receiver
+          expect_to(be_a(expected), calculated, true)
+        end
+
+        def method_must_be_nil
+          expect_to(be_nil, @exp.receiver, true)
+        end
+
+        def method_must_be
+          actual = s(:call, @exp.receiver, @exp.arguments[0][1])
+          actual << @exp.arguments[1] if @exp.arguments[1]
+          expect_to(be_truthy, actual, true)
+        end
+
+        def method_wont_be_empty
+          expect_to_not(be_empty, @exp.receiver, true)
+        end
+
+        def method_wont_equal
+          expect_to_not(eq(@exp.arguments[0]), @exp.receiver, true)
+        end
+
+        def method_wont_include
+          expected = @exp.arguments[0]
+          calculated = @exp.receiver
+          expect_to_not(be_include(expected), calculated, true)
+        end
+
+        def method_wont_be_nil
+          expect_to_not(be_nil, @exp.receiver, true)
+        end
+
+        def method_wont_be
+          actual = s(:call, @exp.receiver, @exp.arguments[0][1])
+          actual << @exp.arguments[1] if @exp.arguments[1]
+          expect_to(be_falsey, actual, true)
+        end
+
         def method_expects
           if @exp.num_arguments == 1 &&
              %i[lit hash].include?(@exp.arguments.first.sexp_type)
@@ -143,13 +287,22 @@ module MinitestToRspec
         end
 
         def method_refute
-          refsert eq(s(:false)), be_falsey
+          actual = @exp.arguments[0]
+          expect_to(be_falsey, actual, true)
         end
 
         def method_refute_equal
           unexpected = @exp.arguments[0]
           calculated = @exp.arguments[1]
           expect_to_not(eq(unexpected), calculated, true)
+        end
+
+        def method_expect
+          if @exp.receiver == nil
+            @exp.arguments
+          else
+            @exp.original
+          end
         end
 
         # Processes an entire line of code that ends in `.returns`
@@ -159,6 +312,44 @@ module MinitestToRspec
           else
             mocha_stub
           end
+        end
+
+        def method_raises
+          if @exp.num_arguments.zero?
+            @exp.original
+          else
+            mocha_stub
+          end
+        end
+
+        def method_with
+          mocha_stub
+        end
+
+        def method_never
+          mocha_stub
+        end
+
+        # def method_mock
+        #   if @exp.receiver == nil
+        #     if @exp.num_arguments == 1 && @exp.arguments.first[0] == :lit
+        #       s(:call, nil, :double, s(:hash, @exp.arguments.first, s(:nil)))
+        #     else
+        #       @exp.sexp[2] = :double
+        #       @exp.sexp
+        #     end
+        #   else
+        #     @exp.original
+        #   end
+        # end
+
+        def method_stubs
+          if @exp.num_arguments == 1 &&
+            %i[lit hash].include?(@exp.arguments.first.sexp_type)
+           mocha_stub
+         else
+           @exp.original
+         end
         end
 
         def method_require
@@ -229,7 +420,7 @@ module MinitestToRspec
         def mocha_stub
           mt_stub = Minitest::Stub.new(@exp)
           msg = mt_stub.message
-          if sexp_type?(:hash, msg)
+          if sexp_type?(:hash, msg) && false
             pointless_lambda(mocha_shorthand_stub_to_rspec_stubs(msg, mt_stub))
           else
             Rspec::Stub.new(
@@ -238,7 +429,8 @@ module MinitestToRspec
               mt_stub.message,
               mt_stub.with,
               mt_stub.returns,
-              mt_stub.count
+              mt_stub.count,
+              mt_stub.raises
             ).to_rspec_exp
           end
         rescue UnknownVariant

@@ -44,6 +44,10 @@ module MinitestToRspec
           !empty? && Model::Call.refute_raises?(@exp[1])
         end
 
+        def assert_changes?
+          true
+        end
+
         def block
           @exp[3]
         end
